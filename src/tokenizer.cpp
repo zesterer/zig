@@ -15,10 +15,6 @@
 #include <limits.h>
 #include <errno.h>
 
-#define WHITESPACE \
-         ' ': \
-    case '\n'
-
 #define DIGIT_NON_ZERO \
          '1': \
     case '2': \
@@ -159,7 +155,8 @@ static bool is_symbol_char(uint8_t c) {
 }
 
 enum TokenizeState {
-    TokenizeStateStart,
+    TokenizeStateCountIndentation,
+    TokenizeStateReady,
     TokenizeStateSymbol,
     TokenizeStateSymbolFirstC,
     TokenizeStateZero, // "0", which might lead to "0x"
@@ -212,8 +209,9 @@ struct Tokenize {
     size_t pos;
     TokenizeState state;
     ZigList<Token> *tokens;
-    int line;
-    int column;
+    size_t line;
+    size_t column;
+    size_t indentation;
     Token *cur_tok;
     Tokenization *out;
     uint32_t radix;
@@ -265,6 +263,7 @@ static void begin_token(Tokenize *t, TokenId id) {
     token->start_line = t->line;
     token->start_column = t->column;
     token->start_pos = t->pos;
+    token->indentation = t->indentation;
 
     set_token_id(t, token, id);
 
@@ -405,9 +404,23 @@ void tokenize(Buf *buf, Tokenization *out) {
         switch (t.state) {
             case TokenizeStateError:
                 break;
-            case TokenizeStateStart:
+            case TokenizeStateCountIndentation:
                 switch (c) {
-                    case WHITESPACE:
+                    case ' ':
+                        t.indentation += 1;
+                        break;
+                    default:
+                        t.pos -= 1;
+                        t.state = TokenizeStateReady;
+                        continue;
+                }
+                break;
+            case TokenizeStateReady:
+                switch (c) {
+                    case ' ':
+                        break;
+                    case '\n':
+                        t.state = TokenizeStateCountIndentation;
                         break;
                     case 'c':
                         t.state = TokenizeStateSymbolFirstC;
@@ -565,17 +578,17 @@ void tokenize(Buf *buf, Tokenization *out) {
                     case '?':
                         set_token_id(&t, t.cur_tok, TokenIdDoubleQuestion);
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     case '=':
                         set_token_id(&t, t.cur_tok, TokenIdMaybeAssign);
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     default:
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                 }
                 break;
@@ -588,14 +601,14 @@ void tokenize(Buf *buf, Tokenization *out) {
                     default:
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                 }
                 break;
             case TokenizeStateSawDotDot:
                 switch (c) {
                     case '.':
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         end_token(&t);
                         break;
                     default:
@@ -607,7 +620,7 @@ void tokenize(Buf *buf, Tokenization *out) {
                     case '=':
                         set_token_id(&t, t.cur_tok, TokenIdCmpGreaterOrEq);
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     case '>':
                         set_token_id(&t, t.cur_tok, TokenIdBitShiftRight);
@@ -616,7 +629,7 @@ void tokenize(Buf *buf, Tokenization *out) {
                     default:
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                 }
                 break;
@@ -625,12 +638,12 @@ void tokenize(Buf *buf, Tokenization *out) {
                     case '=':
                         set_token_id(&t, t.cur_tok, TokenIdBitShiftRightEq);
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     default:
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                 }
                 break;
@@ -639,7 +652,7 @@ void tokenize(Buf *buf, Tokenization *out) {
                     case '=':
                         set_token_id(&t, t.cur_tok, TokenIdCmpLessOrEq);
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     case '<':
                         set_token_id(&t, t.cur_tok, TokenIdBitShiftLeft);
@@ -648,7 +661,7 @@ void tokenize(Buf *buf, Tokenization *out) {
                     default:
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                 }
                 break;
@@ -657,7 +670,7 @@ void tokenize(Buf *buf, Tokenization *out) {
                     case '=':
                         set_token_id(&t, t.cur_tok, TokenIdBitShiftLeftEq);
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     case '%':
                         set_token_id(&t, t.cur_tok, TokenIdBitShiftLeftPercent);
@@ -666,7 +679,7 @@ void tokenize(Buf *buf, Tokenization *out) {
                     default:
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                 }
                 break;
@@ -675,12 +688,12 @@ void tokenize(Buf *buf, Tokenization *out) {
                     case '=':
                         set_token_id(&t, t.cur_tok, TokenIdBitShiftLeftPercentEq);
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     default:
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                 }
                 break;
@@ -689,12 +702,12 @@ void tokenize(Buf *buf, Tokenization *out) {
                     case '=':
                         set_token_id(&t, t.cur_tok, TokenIdCmpNotEq);
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     default:
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                 }
                 break;
@@ -703,17 +716,17 @@ void tokenize(Buf *buf, Tokenization *out) {
                     case '=':
                         set_token_id(&t, t.cur_tok, TokenIdCmpEq);
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     case '>':
                         set_token_id(&t, t.cur_tok, TokenIdFatArrow);
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     default:
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                 }
                 break;
@@ -722,12 +735,12 @@ void tokenize(Buf *buf, Tokenization *out) {
                     case '=':
                         set_token_id(&t, t.cur_tok, TokenIdTimesEq);
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     case '*':
                         set_token_id(&t, t.cur_tok, TokenIdStarStar);
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     case '%':
                         set_token_id(&t, t.cur_tok, TokenIdTimesPercent);
@@ -736,7 +749,7 @@ void tokenize(Buf *buf, Tokenization *out) {
                     default:
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                 }
                 break;
@@ -745,12 +758,12 @@ void tokenize(Buf *buf, Tokenization *out) {
                     case '=':
                         set_token_id(&t, t.cur_tok, TokenIdTimesPercentEq);
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     default:
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                 }
                 break;
@@ -759,22 +772,22 @@ void tokenize(Buf *buf, Tokenization *out) {
                     case '=':
                         set_token_id(&t, t.cur_tok, TokenIdModEq);
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     case '.':
                         set_token_id(&t, t.cur_tok, TokenIdPercentDot);
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     case '%':
                         set_token_id(&t, t.cur_tok, TokenIdPercentPercent);
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     default:
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                 }
                 break;
@@ -783,12 +796,12 @@ void tokenize(Buf *buf, Tokenization *out) {
                     case '=':
                         set_token_id(&t, t.cur_tok, TokenIdPlusEq);
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     case '+':
                         set_token_id(&t, t.cur_tok, TokenIdPlusPlus);
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     case '%':
                         set_token_id(&t, t.cur_tok, TokenIdPlusPercent);
@@ -797,7 +810,7 @@ void tokenize(Buf *buf, Tokenization *out) {
                     default:
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                 }
                 break;
@@ -806,12 +819,12 @@ void tokenize(Buf *buf, Tokenization *out) {
                     case '=':
                         set_token_id(&t, t.cur_tok, TokenIdPlusPercentEq);
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     default:
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                 }
                 break;
@@ -824,12 +837,12 @@ void tokenize(Buf *buf, Tokenization *out) {
                     case '=':
                         set_token_id(&t, t.cur_tok, TokenIdBitAndEq);
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     default:
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                 }
                 break;
@@ -838,12 +851,12 @@ void tokenize(Buf *buf, Tokenization *out) {
                     case '=':
                         set_token_id(&t, t.cur_tok, TokenIdBoolAndEq);
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     default:
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                 }
                 break;
@@ -852,12 +865,12 @@ void tokenize(Buf *buf, Tokenization *out) {
                     case '=':
                         set_token_id(&t, t.cur_tok, TokenIdBitXorEq);
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     default:
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                 }
                 break;
@@ -870,12 +883,12 @@ void tokenize(Buf *buf, Tokenization *out) {
                     case '=':
                         set_token_id(&t, t.cur_tok, TokenIdBitOrEq);
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     default:
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                 }
                 break;
@@ -884,12 +897,12 @@ void tokenize(Buf *buf, Tokenization *out) {
                     case '=':
                         set_token_id(&t, t.cur_tok, TokenIdBoolOrEq);
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     default:
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                 }
                 break;
@@ -902,12 +915,12 @@ void tokenize(Buf *buf, Tokenization *out) {
                     case '=':
                         set_token_id(&t, t.cur_tok, TokenIdDivEq);
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     default:
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                 }
                 break;
@@ -933,13 +946,14 @@ void tokenize(Buf *buf, Tokenization *out) {
                 break;
             case TokenizeStateLineStringEnd:
                 switch (c) {
-                    case WHITESPACE:
+                    case ' ':
+                    case '\n':
                         break;
                     case 'c':
                         if (!t.cur_tok->data.str_lit.is_c_str) {
                             t.pos -= 1;
                             end_token(&t);
-                            t.state = TokenizeStateStart;
+                            t.state = TokenizeStateReady;
                             break;
                         }
                         t.state = TokenizeStateLineStringContinueC;
@@ -953,7 +967,7 @@ void tokenize(Buf *buf, Tokenization *out) {
                     default:
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                 }
                 break;
@@ -965,7 +979,7 @@ void tokenize(Buf *buf, Tokenization *out) {
                     default:
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                 }
                 break;
@@ -983,7 +997,7 @@ void tokenize(Buf *buf, Tokenization *out) {
             case TokenizeStateLineComment:
                 switch (c) {
                     case '\n':
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     default:
                         // do nothing
@@ -1009,7 +1023,7 @@ void tokenize(Buf *buf, Tokenization *out) {
                     default:
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                 }
                 break;
@@ -1022,7 +1036,7 @@ void tokenize(Buf *buf, Tokenization *out) {
                     default:
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                 }
                 break;
@@ -1034,7 +1048,7 @@ void tokenize(Buf *buf, Tokenization *out) {
                     default:
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                 }
                 break;
@@ -1042,7 +1056,7 @@ void tokenize(Buf *buf, Tokenization *out) {
                 switch (c) {
                     case '"':
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     case '\n':
                         tokenize_error(&t, "newline not allowed in string literal");
@@ -1171,7 +1185,7 @@ void tokenize(Buf *buf, Tokenization *out) {
                 switch (c) {
                     case '\'':
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     default:
                         tokenize_error(&t, "invalid character: '%c'", c);
@@ -1219,7 +1233,7 @@ void tokenize(Buf *buf, Tokenization *out) {
                         // not my char
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                     }
                     t.cur_tok->data.num_lit.overflow = t.cur_tok->data.num_lit.overflow ||
@@ -1232,7 +1246,7 @@ void tokenize(Buf *buf, Tokenization *out) {
                 if (c == '.') {
                     t.pos -= 2;
                     end_token(&t);
-                    t.state = TokenizeStateStart;
+                    t.state = TokenizeStateReady;
                     continue;
                 }
                 t.pos -= 1;
@@ -1253,7 +1267,7 @@ void tokenize(Buf *buf, Tokenization *out) {
                         // not my char
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                     }
                     t.exponent_in_bin_or_dec -= t.exp_add_amt;
@@ -1296,7 +1310,7 @@ void tokenize(Buf *buf, Tokenization *out) {
                         // not my char
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                     }
                     if (t.radix == 10) {
@@ -1315,12 +1329,12 @@ void tokenize(Buf *buf, Tokenization *out) {
                     case '>':
                         set_token_id(&t, t.cur_tok, TokenIdArrow);
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     case '=':
                         set_token_id(&t, t.cur_tok, TokenIdMinusEq);
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     case '%':
                         set_token_id(&t, t.cur_tok, TokenIdMinusPercent);
@@ -1329,7 +1343,7 @@ void tokenize(Buf *buf, Tokenization *out) {
                     default:
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                 }
                 break;
@@ -1338,12 +1352,12 @@ void tokenize(Buf *buf, Tokenization *out) {
                     case '=':
                         set_token_id(&t, t.cur_tok, TokenIdMinusPercentEq);
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         break;
                     default:
                         t.pos -= 1;
                         end_token(&t);
-                        t.state = TokenizeStateStart;
+                        t.state = TokenizeStateReady;
                         continue;
                 }
                 break;
@@ -1352,13 +1366,15 @@ void tokenize(Buf *buf, Tokenization *out) {
             out->line_offsets->append(t.pos + 1);
             t.line += 1;
             t.column = 0;
+            t.indentation = 0;
         } else {
             t.column += 1;
         }
     }
     // EOF
     switch (t.state) {
-        case TokenizeStateStart:
+        case TokenizeStateReady:
+        case TokenizeStateCountIndentation:
         case TokenizeStateError:
             break;
         case TokenizeStateNumberDot:

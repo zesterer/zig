@@ -142,7 +142,7 @@ static void mark_impure_fn(CodeGen *g, BlockContext *context, AstNode *node) {
     }
 }
 
-ErrorMsg *add_node_error(CodeGen *g, AstNode *node, Buf *msg) {
+static ErrorMsg *add_node_error_with_pos(CodeGen *g, AstNode *node, size_t line, size_t column, Buf *msg) {
     // if this assert fails, then parseh generated code that
     // failed semantic analysis, which isn't supposed to happen
     assert(!node->owner->c_import_node);
@@ -155,23 +155,33 @@ ErrorMsg *add_node_error(CodeGen *g, AstNode *node, Buf *msg) {
         }
     }
 
-    ErrorMsg *err = err_msg_create_with_line(node->owner->path, node->line, node->column,
+    ErrorMsg *err = err_msg_create_with_line(node->owner->path, line, column,
             node->owner->source_code, node->owner->line_offsets, msg);
 
     g->errors.append(err);
     return err;
 }
 
-ErrorMsg *add_error_note(CodeGen *g, ErrorMsg *parent_msg, AstNode *node, Buf *msg) {
+ErrorMsg *add_node_error(CodeGen *g, AstNode *node, Buf *msg) {
+    return add_node_error_with_pos(g, node, node->line, node->column, msg);
+}
+
+static ErrorMsg *add_error_note_with_pos(CodeGen *g, ErrorMsg *parent_msg, AstNode *node,
+        size_t line, size_t column, Buf *msg)
+{
     // if this assert fails, then parseh generated code that
     // failed semantic analysis, which isn't supposed to happen
     assert(!node->owner->c_import_node);
 
-    ErrorMsg *err = err_msg_create_with_line(node->owner->path, node->line, node->column,
+    ErrorMsg *err = err_msg_create_with_line(node->owner->path, line, column,
             node->owner->source_code, node->owner->line_offsets, msg);
 
     err_msg_add_note(parent_msg, err);
     return err;
+}
+
+ErrorMsg *add_error_note(CodeGen *g, ErrorMsg *parent_msg, AstNode *node, Buf *msg) {
+    return add_error_note_with_pos(g, parent_msg, node, node->line, node->column, msg);
 }
 
 TypeTableEntry *new_type_table_entry(TypeTableEntryId id) {
@@ -2295,6 +2305,7 @@ static AstNode *create_ast_node(CodeGen *g, ImportTableEntry *import, NodeType k
     g->next_node_index += 1;
     node->line = source_node->line;
     node->column = source_node->column;
+    node->indentation = SIZE_MAX;
     return node;
 }
 
@@ -6460,8 +6471,20 @@ static TypeTableEntry *analyze_block_expr(CodeGen *g, ImportTableEntry *import, 
     node->data.block.child_block = child_context;
     TypeTableEntry *return_type = g->builtin_types.entry_void;
 
+    bool found_indent_error = false;
+
     for (size_t i = 0; i < node->data.block.statements.length; i += 1) {
         AstNode *child = node->data.block.statements.at(i);
+
+        // check for unindented block code
+        if (!found_indent_error && child->indentation <= node->indentation) {
+            ErrorMsg *msg = add_node_error_with_pos(g, child, child->line, child->indentation,
+                    buf_sprintf("incorrectly indented code"));
+            add_error_note_with_pos(g, msg, node, node->line, node->indentation,
+                    buf_sprintf("must indent at least more than this"));
+            found_indent_error = true;
+        }
+
         if (child->type == NodeTypeLabel) {
             FnTableEntry *fn_table_entry = child_context->fn_entry;
             assert(fn_table_entry);
@@ -6486,7 +6509,7 @@ static TypeTableEntry *analyze_block_expr(CodeGen *g, ImportTableEntry *import, 
                 analyze_expression(g, import, child_context, g->builtin_types.entry_void, child);
                 continue;
             }
-            add_node_error(g, first_executing_node(child), buf_sprintf("unreachable code"));
+            add_node_error(g, first_executing_node(node), buf_sprintf("unreachable code"));
             break;
         }
         bool is_last = (i == node->data.block.statements.length - 1);

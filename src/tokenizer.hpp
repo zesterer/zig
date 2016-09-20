@@ -135,6 +135,7 @@ struct Token {
     size_t end_pos;
     size_t start_line;
     size_t start_column;
+    size_t indentation;
 
     union {
         // TokenIdNumberLiteral

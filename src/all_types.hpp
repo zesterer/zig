@@ -776,6 +776,7 @@ struct AstNode {
     enum NodeType type;
     size_t line;
     size_t column;
+    size_t indentation;
     uint32_t create_index; // for determinism purposes
     ImportTableEntry *owner;
     AstNode **parent_field; // for AST rewriting

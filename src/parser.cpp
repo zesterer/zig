@@ -78,6 +78,7 @@ static AstNode *ast_create_node_no_line_info(ParseContext *pc, NodeType type) {
 static void ast_update_node_line_info(AstNode *node, Token *first_token) {
     node->line = first_token->start_line;
     node->column = first_token->start_column;
+    node->indentation = first_token->indentation;
 }
 
 static AstNode *ast_create_node(ParseContext *pc, NodeType type, Token *first_token) {
@@ -89,6 +90,7 @@ static AstNode *ast_create_node(ParseContext *pc, NodeType type, Token *first_to
 static AstNode *ast_create_void_type_node(ParseContext *pc, Token *token) {
     AstNode *node = ast_create_node(pc, NodeTypeSymbol, token);
     node->data.symbol_expr.symbol = pc->void_buf;
+    node->indentation = SIZE_MAX;
     return node;
 }
 
