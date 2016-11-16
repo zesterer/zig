@@ -27,7 +27,6 @@ struct LabelTableEntry;
 struct BuiltinFnEntry;
 struct TypeStructField;
 struct CodeGen;
-struct ConstExprValue;
 struct IrInstruction;
 struct IrInstructionCast;
 struct IrBasicBlock;
@@ -45,57 +44,107 @@ enum OutType {
     OutTypeObj,
 };
 
-struct ConstEnumValue {
-    uint64_t tag;
-    ConstExprValue *payload;
+enum ConstValueId {
+    ConstValueIdOther,
+    ConstValueIdUndef,
+    ConstValueIdZeroes,
 };
 
-struct ConstStructValue {
-    ConstExprValue **fields;
-};
-
-struct ConstArrayValue {
-    ConstExprValue **fields;
-};
-
-struct ConstPtrValue {
-    ConstExprValue **ptr;
-    // len should almost always be 1. exceptions include C strings
-    uint64_t len;
-    bool is_c_str;
-};
-
-struct ConstErrValue {
-    ErrorTableEntry *err;
-    ConstExprValue *payload;
-};
-
-enum ConstValSpecial {
-    ConstValSpecialOther,
-    ConstValSpecialUndef,
-    ConstValSpecialZeroes,
-};
-
-struct ConstExprValue {
-    bool ok;
+struct ConstValue {
+    ConstValueId id;
+    LLVMValueRef llvm_value;
     bool depends_on_compile_var;
-    ConstValSpecial special;
+};
 
-    // populated if val_type == ConstValTypeOk
-    union {
-        BigNum x_bignum;
-        bool x_bool;
-        FnTableEntry *x_fn;
-        TypeTableEntry *x_type;
-        ConstExprValue *x_maybe;
-        ConstErrValue x_err;
-        ConstEnumValue x_enum;
-        ConstStructValue x_struct;
-        ConstArrayValue x_array;
-        ConstPtrValue x_ptr;
-        ImportTableEntry *x_import;
-        BlockContext *x_block;
-    } data;
+struct ConstValueBigNum {
+    ConstValue base;
+
+    BigNum value;
+};
+
+struct ConstValueBool {
+    ConstValue base;
+
+    bool value;
+};
+
+struct ConstValueFn {
+    ConstValue base;
+
+    FnTableEntry *value;
+};
+
+struct ConstValueType {
+    ConstValue base;
+
+    TypeTableEntry *value;
+};
+
+struct ConstValueMaybe {
+    ConstValue base;
+
+    ConstValue *value;
+};
+
+struct ConstValueErrorUnion {
+    ConstValue base;
+
+    ErrorTableEntry *err;
+    ConstValue *payload;
+};
+
+struct ConstValuePureError {
+    ConstValue base;
+
+    ErrorTableEntry *value;
+};
+
+struct ConstValueEnum {
+    ConstValue base;
+
+    uint64_t tag;
+    ConstValue *payload;
+};
+
+struct ConstValueStruct {
+    ConstValue base;
+
+    ConstValue *fields[];
+};
+
+struct ConstValueArray {
+    ConstValue base;
+
+    ConstValue *elements[];
+};
+
+struct ConstValuePtr {
+    ConstValue base;
+
+    ConstValue *base_ptr;
+    // offset in object units from base_ptr into the block of memory pointed to 
+    uint64_t index;
+    // number of objects in the entire block of memory pointed to, from base_ptr.
+    // If pointed to type is not array, index should be 0 and size should be 1.
+    uint64_t size;
+    // This flag helps us preserve the null byte when performing compile-time
+    // concatenation on C strings.
+    bool is_c_str;
+    // If this is true then this const value points to a ConstValueArray rather than
+    // a ConstValue that maps to the child type.
+    bool backed_by_array;
+};
+
+struct ConstValueImport {
+    ConstValue base;
+
+    ImportTableEntry *value;
+};
+
+struct ConstValueScope {
+    ConstValue base;
+
+    BlockContext *value;
 };
 
 enum ReturnKnowledge {
@@ -112,9 +161,7 @@ struct Expr {
     ReturnKnowledge return_knowledge;
     VariableTableEntry *variable;
 
-    LLVMValueRef const_llvm_val;
-    ConstExprValue const_val;
-    bool has_global_const;
+    ConstValue *const_val;
 };
 
 struct StructValExprCodeGen {
@@ -1342,7 +1389,7 @@ struct VariableTableEntry {
     bool is_inline;
     // which node is the declaration of the variable
     AstNode *decl_node;
-    // which node contains the ConstExprValue for this variable's value
+    // which node contains the ConstValue for this variable's value
     AstNode *val_node;
     ZigLLVMDILocalVariable *di_loc_var;
     size_t src_arg_index;
@@ -1454,7 +1501,7 @@ enum IrInstructionId {
 struct IrInstruction {
     IrInstructionId id;
     AstNode *source_node;
-    ConstExprValue static_value;
+    ConstValue *static_value;
     TypeTableEntry *type_entry;
     size_t debug_id;
     LLVMValueRef llvm_value;

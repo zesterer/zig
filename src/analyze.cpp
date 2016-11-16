@@ -3237,3 +3237,88 @@ uint64_t get_memcpy_align(CodeGen *g, TypeTableEntry *type_entry) {
     return LLVMABISizeOfType(g->target_data_ref, first_type_in_mem->type_ref);
 }
 
+ConstValueBigNum *create_const_uint(uint64_t value) {
+    ConstValueBigNum *bignum_val = allocate<ConstValueBigNum>(1);
+    bignum_init_unsigned(&bignum_val->value, value);
+    return bignum_val;
+}
+
+ConstValueArray *create_const_array(TypeTableEntry *array_type) {
+    assert(array_type->id == TypeTableEntryIdArray);
+
+    uint64_t len = array_type->data.array.len;
+    uint8_t *mem = allocate<uint8_t>(sizeof(ConstValueArray) + sizeof(ConstValue *) * len);
+    return reinterpret_cast<ConstValueArray *>(mem);
+}
+
+ConstValue *create_const_void(void) {
+    return allocate<ConstValue>(1);
+}
+
+ConstValue *create_const_unreach(void) {
+    return allocate<ConstValue>(1);
+}
+
+ConstValue *create_const_undef(void) {
+    ConstValue *val = allocate<ConstValue>(1);
+    val->id == ConstValueIdUndef;
+    return val;
+}
+
+ConstValue *create_const_zeroes(void) {
+    ConstValue *val = allocate<ConstValue>(1);
+    val->id == ConstValueIdUndef;
+    return val;
+}
+
+ConstValue *create_const_null(void) {
+    return allocate<ConstValue>(1);
+}
+
+//ConstValue *create_const_val(TypeTableEntry *type_entry) {
+//    switch (get_underlying_type(type_entry)->id) {
+//        case TypeTableEntryIdInvalid:
+//        case TypeTableEntryIdVar:
+//        case TypeTableEntryIdTypeDecl:
+//            zig_unreachable();
+//        case TypeTableEntryIdNumLitFloat:
+//        case TypeTableEntryIdNumLitInt:
+//        case TypeTableEntryIdInt:
+//        case TypeTableEntryIdFloat:
+//            return &allocate<ConstValueBigNum>(1)->base;
+//        case TypeTableEntryIdUndefLit:
+//            return create_const_undef();
+//        case TypeTableEntryIdNullLit:
+//        case TypeTableEntryIdUnreachable:
+//        case TypeTableEntryIdVoid:
+//            return allocate<ConstValue>(1);
+//        case TypeTableEntryIdMetaType:
+//        case TypeTableEntryIdGenericFn:
+//            return &allocate<ConstValueType>(1)->base;
+//        case TypeTableEntryIdNamespace:
+//            return &allocate<ConstValueImport>(1)->base;
+//        case TypeTableEntryIdBlock:
+//            return &allocate<ConstValueScope>(1)->base;
+//        case TypeTableEntryIdFn:
+//            return &allocate<ConstValueFn>(1)->base;
+//        case TypeTableEntryIdArray:
+//            return &allocate<ConstValueArray>(1)->base;
+//        case TypeTableEntryIdStruct:
+//            return &allocate<ConstValueStruct>(1)->base;
+//        case TypeTableEntryIdUnion:
+//            zig_panic("TODO");
+//        case TypeTableEntryIdMaybe:
+//            return &allocate<ConstValueMaybe>(1)->base;
+//        case TypeTableEntryIdErrorUnion:
+//            return &allocate<ConstValueErrorUnion>(1)->base;
+//        case TypeTableEntryIdEnum:
+//            return &allocate<ConstValueEnum>(1)->base;
+//        case TypeTableEntryIdPureError:
+//            return &allocate<ConstValuePureError>(1)->base;
+//        case TypeTableEntryIdBool:
+//            return &allocate<ConstValueBool>(1)->base;
+//        case TypeTableEntryIdPointer:
+//            return &allocate<ConstValuePtr>(1)->base;
+//    }
+//    zig_unreachable();
+//}

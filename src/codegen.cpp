@@ -226,7 +226,7 @@ void codegen_set_rdynamic(CodeGen *g, bool rdynamic) {
     g->linker_rdynamic = rdynamic;
 }
 
-static LLVMValueRef gen_const_val(CodeGen *g, TypeTableEntry *type_entry, ConstExprValue *const_val);
+static void render_const_val(CodeGen *g, TypeTableEntry *type_entry, ConstExprValue *const_val);
 
 static void set_debug_source_node(CodeGen *g, AstNode *node) {
     assert(node->block_context);
@@ -864,7 +864,8 @@ static LLVMValueRef ir_llvm_value(CodeGen *g, IrInstruction *instruction) {
     if (!instruction->llvm_value) {
         assert(instruction->static_value.ok);
         assert(instruction->type_entry);
-        instruction->llvm_value = gen_const_val(g, instruction->type_entry, &instruction->static_value);
+        render_const_val(g, instruction->type_entry, &instruction->static_value);
+        instruction->llvm_value = instruction->static_value.llvm_value;
         assert(instruction->llvm_value);
     }
     return instruction->llvm_value;
@@ -1879,23 +1880,28 @@ static LLVMValueRef gen_const_val(CodeGen *g, TypeTableEntry *type_entry, ConstE
             {
                 TypeTableEntry *child_type = type_entry->data.pointer.child_type;
                 size_t len = const_val->data.x_ptr.len;
-                LLVMValueRef target_val;
-                if (len == 1) {
-                    target_val = gen_const_val(g, child_type, const_val->data.x_ptr.ptr[0]);
-                } else if (len > 1) {
-                    LLVMValueRef *values = allocate<LLVMValueRef>(len);
-                    for (size_t i = 0; i < len; i += 1) {
-                        values[i] = gen_const_val(g, child_type, const_val->data.x_ptr.ptr[i]);
-                    }
-                    target_val = LLVMConstArray(child_type->type_ref, values, len);
-                } else {
-                    return LLVMGetUndef(type_entry->type_ref);
-                }
                 LLVMValueRef global_value = LLVMAddGlobal(g->module, LLVMTypeOf(target_val), "");
-                LLVMSetInitializer(global_value, target_val);
                 LLVMSetLinkage(global_value, LLVMPrivateLinkage);
                 LLVMSetGlobalConstant(global_value, type_entry->data.pointer.is_const);
                 LLVMSetUnnamedAddr(global_value, true);
+                const_val->llvm_value = global_value;
+
+                LLVMValueRef target_val;
+                if (len == 1) {
+                    ConstExprValue *child_const_val = const_val->data.x_ptr.ptr;
+                    render_const_val(g, child_type, child_const_val);
+                    target_val = child_const_val->llvm_value;
+                } else if (len > 1) {
+                    zig_panic("TODO len > 1");
+                    //LLVMValueRef *values = allocate<LLVMValueRef>(len);
+                    //for (size_t i = 0; i < len; i += 1) {
+                    //    values[i] = gen_const_val(g, child_type, const_val->data.x_ptr.ptr[i]);
+                    //}
+                    //target_val = LLVMConstArray(child_type->type_ref, values, len);
+                } else {
+                    return LLVMGetUndef(type_entry->type_ref);
+                }
+                LLVMSetInitializer(global_value, target_val);
 
                 if (len > 1) {
                     return LLVMConstBitCast(global_value, type_entry->type_ref);
@@ -1943,6 +1949,13 @@ static LLVMValueRef gen_const_val(CodeGen *g, TypeTableEntry *type_entry, ConstE
 
     }
     zig_unreachable();
+}
+
+static void render_const_val(CodeGen *g, TypeTableEntry *type_entry, ConstExprValue *const_val) {
+    if (const_val->llvm_value)
+        return const_val->llvm_value;
+
+    const_val->llvm_value = gen_const_val(g, type_entry, const_val);
 }
 
 static void gen_const_globals(CodeGen *g) {

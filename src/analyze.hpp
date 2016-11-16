@@ -64,4 +64,14 @@ BlockContext *get_container_block_context(TypeTableEntry *type_entry);
 TypeEnumField *find_enum_type_field(TypeTableEntry *enum_type, Buf *name);
 bool is_container_ref(TypeTableEntry *type_entry);
 
+//ConstValue *create_const_val(TypeTableEntry *type_entry);
+ConstValueArray *create_const_array(TypeTableEntry *array_type);
+ConstValueBigNum *create_const_uint(uint64_t value);
+ConstValue *create_const_void(void);
+ConstValue *create_const_undef(void);
+ConstValue *create_const_unreach(void);
+ConstValue *create_const_zeroes(void);
+ConstValue *create_const_null(void);
+
+
 #endif
