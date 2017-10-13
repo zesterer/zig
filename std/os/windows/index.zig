@@ -14,6 +14,11 @@ pub extern "kernel32" stdcallcc fn CreateFileA(lpFileName: LPCSTR, dwDesiredAcce
     dwShareMode: DWORD, lpSecurityAttributes: ?LPSECURITY_ATTRIBUTES, dwCreationDisposition: DWORD,
         dwFlagsAndAttributes: DWORD, hTemplateFile: ?HANDLE) -> HANDLE;
 
+pub extern "kernel32" stdcallcc fn CreateProcessA(lpApplicationName: ?LPCSTR, lpCommandLine: LPSTR,
+    lpProcessAttributes: LPSECURITY_ATTRIBUTES, lpThreadAttributes: LPSECURITY_ATTRIBUTES, bInheritHandles: BOOL,
+    dwCreationFlags: DWORD, lpEnvironment: LPVOID, lpCurrentDirectory: LPCSTR, lpStartupInfo: &STARTUPINFOA,
+    lpProcessInformation: &PROCESS_INFORMATION) -> BOOL;
+
 pub extern "kernel32" stdcallcc fn DeleteFileA(lpFileName: LPCSTR) -> bool;
 
 pub extern "kernel32" stdcallcc fn ExitProcess(exit_code: UINT) -> noreturn;
@@ -51,11 +56,15 @@ pub extern "kernel32" stdcallcc fn WriteFile(in_hFile: HANDLE, in_lpBuffer: &con
 
 pub extern "kernel32" stdcallcc fn Sleep(dwMilliseconds: DWORD);
 
+pub extern "kernel32" stdcallcc fn TerminateProcess(hProcess: HANDLE, uExitCode: UINT) -> BOOL;
+
 pub extern "kernel32" stdcallcc fn HeapAlloc(hHeap: HANDLE, dwFlags: DWORD, dwBytes: SIZE_T) -> LPVOID;
 
 pub extern "kernel32" stdcallcc fn HeapFree(hHeap: HANDLE, dwFlags: DWORD, lpMem: LPVOID) -> BOOL;
 
 pub extern "kernel32" stdcallcc fn GetProcessHeap() -> HANDLE;
+
+pub extern "kernel32" stdcallcc fn WaitForSingleObject(hHandle: HANDLE, dwMilliseconds: DWORD) -> DWORD;
 
 pub extern "user32" stdcallcc fn MessageBoxA(hWnd: ?HANDLE, lpText: ?LPCTSTR, lpCaption: ?LPCTSTR, uType: UINT) -> c_int;
 
@@ -158,7 +167,7 @@ pub const VOLUME_NAME_NT = 0x2;
 
 pub const SECURITY_ATTRIBUTES = extern struct {
     nLength: DWORD,
-    lpSecurityDescriptor: LPVOID,
+    lpSecurityDescriptor: ?LPVOID,
     bInheritHandle: BOOL,
 };
 pub const PSECURITY_ATTRIBUTES = &SECURITY_ATTRIBUTES;
@@ -189,3 +198,53 @@ pub const FILE_ATTRIBUTE_OFFLINE = 0x1000;
 pub const FILE_ATTRIBUTE_READONLY = 0x1;
 pub const FILE_ATTRIBUTE_SYSTEM = 0x4;
 pub const FILE_ATTRIBUTE_TEMPORARY = 0x100;
+
+pub const PROCESS_INFORMATION = extern struct {
+    hProcess: HANDLE,
+    hThread: HANDLE,
+    dwProcessId: DWORD,
+    dwThreadId: DWORD,
+};
+
+pub const STARTUPINFOA = extern struct {
+    cb: DWORD,
+    lpReserved: ?LPSTR,
+    lpDesktop: ?LPSTR,
+    lpTitle: ?LPSTR,
+    dwX: DWORD,
+    dwY: DWORD,
+    dwXSize: DWORD,
+    dwYSize: DWORD,
+    dwXCountChars: DWORD,
+    dwYCountChars: DWORD,
+    dwFillAttribute: DWORD,
+    dwFlags: DWORD,
+    wShowWindow: WORD,
+    cbReserved2: WORD,
+    lpReserved2: ?LPBYTE,
+    hStdInput: ?HANDLE,
+    hStdOutput: ?HANDLE,
+    hStdError: ?HANDLE,
+};
+
+pub const STARTF_FORCEONFEEDBACK = 0x00000040;
+pub const STARTF_FORCEOFFFEEDBACK = 0x00000080;
+pub const STARTF_PREVENTPINNING = 0x00002000;
+pub const STARTF_RUNFULLSCREEN = 0x00000020;
+pub const STARTF_TITLEISAPPID = 0x00001000;
+pub const STARTF_TITLEISLINKNAME = 0x00000800;
+pub const STARTF_UNTRUSTEDSOURCE = 0x00008000;
+pub const STARTF_USECOUNTCHARS = 0x00000008;
+pub const STARTF_USEFILLATTRIBUTE = 0x00000010;
+pub const STARTF_USEHOTKEY = 0x00000200;
+pub const STARTF_USEPOSITION = 0x00000004;
+pub const STARTF_USESHOWWINDOW = 0x00000001;
+pub const STARTF_USESIZE = 0x00000002;
+pub const STARTF_USESTDHANDLES = 0x00000100;
+
+pub const INFINITE = 4294967295;
+
+pub const WAIT_ABANDONED = 0x00000080;
+pub const WAIT_OBJECT_0 = 0x00000000;
+pub const WAIT_TIMEOUT = 0x00000102;
+pub const WAIT_FAILED = 0xFFFFFFFF;

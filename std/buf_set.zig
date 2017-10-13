@@ -45,6 +45,10 @@ pub const BufSet = struct {
         return self.hash_map.iterator();
     }
 
+    pub fn allocator(self: &const BufSet) -> &Allocator {
+        return self.hash_map.allocator;
+    }
+
     fn free(self: &BufSet, value: []const u8) {
         // remove the const
         const mut_value = @ptrCast(&u8, value.ptr)[0..value.len];
