@@ -439,7 +439,7 @@ pub fn posixExecve(argv: []const []const u8, env_map: &const BufMap,
     }
     argv_buf[argv.len] = null;
 
-    const envp_buf = createNullDelimitedEnvMap(allocator, env_map);
+    const envp_buf = %return createNullDelimitedEnvMap(allocator, env_map);
     defer freeNullDelimitedEnvMap(allocator, envp_buf);
 
     const exe_path = argv[0];
