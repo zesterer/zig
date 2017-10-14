@@ -1,6 +1,7 @@
 const io = @import("../io.zig");
 const os = @import("index.zig");
 const posix = os.posix;
+const windows = os.windows;
 const mem = @import("../mem.zig");
 const Allocator = mem.Allocator;
 const debug = @import("../debug.zig");
@@ -202,9 +203,17 @@ pub const ChildProcess = struct {
 
     fn waitUnwrappedWindows(self: &ChildProcess) -> %void {
         const result = os.windowsWaitSingle(self.handle, windows.INFINITE);
-        TODO - set term
-        TODO CloseHandle(piProcInfo.hProcess);
-        TODO CloseHandle(piProcInfo.hThread);
+
+        self.term = {
+            var exit_code: windows.DWORD = undefined;
+            if (!windows.GetExitCodeProcess(self.handle, &exit_code)) {
+                Term.Unknown{0}
+            } else {
+                Term.Exited {@bitCast(i32, exit_code)}
+            }
+        };
+
+        os.windowsClose(self.handle);
         self.cleanupStreams();
         return result;
     }
@@ -493,6 +502,27 @@ pub const ChildProcess = struct {
         }
         %defer if (self.stdin_behavior == StdIo.Pipe) { windowsDestroyPipe(g_hChildStd_ERR_Rd, g_hChildStd_ERR_Wr); };
 
+        const stdin_ptr = if (self.stdin_behavior == StdIo.Pipe) {
+            %return self.allocator.create(io.OutStream)
+        } else {
+            null
+        };
+        %defer if (stdin_ptr) |ptr| self.allocator.destroy(ptr);
+
+        const stdout_ptr = if (self.stdout_behavior == StdIo.Pipe) {
+            %return self.allocator.create(io.InStream)
+        } else {
+            null
+        };
+        %defer if (stdout_ptr) |ptr| self.allocator.destroy(ptr);
+
+        const stderr_ptr = if (self.stderr_behavior == StdIo.Pipe) {
+            %return self.allocator.create(io.InStream)
+        } else {
+            null
+        };
+        %defer if (stderr_ptr) |ptr| self.allocator.destroy(ptr);
+
         const cmd_line = windowsCreateCommandLine(self.allocator, self.argv);
         defer self.allocator.free(cmd_line);
 
@@ -547,6 +577,37 @@ pub const ChildProcess = struct {
                 else => error.Unexpected,
             };
         }
+        os.windowsClose(piProcInfo.hThread);
+
+        if (stdin_ptr) |outstream| {
+            *outstream = io.OutStream {
+                .fd = {},
+                .handle = g_hChildStd_IN_Wr,
+                .handle_id = undefined,
+                .buffer = undefined,
+                .index = 0,
+            };
+        }
+        if (stdout_ptr) |instream| {
+            *instream = io.InStream {
+                .fd = {},
+                .handle = g_hChildStd_OUT_Rd,
+                .handle_id = undefined,
+            };
+        }
+        if (stderr_ptr) |instream| {
+            *instream = io.InStream {
+                .fd = {},
+                .handle = g_hChildStd_ERR_Rd,
+                .handle_id = undefined,
+            };
+        }
+
+        self.handle = piProcInfo.hProcess;
+        self.term = null;
+        self.stdin = stdin_ptr;
+        self.stdout = stdout_ptr;
+        self.stderr = stderr_ptr;
 
         if (self.stdin_behavior == StdIo.Pipe) { os.windowsClose(g_hChildStd_IN_Rd); }
         if (self.stderr_behavior == StdIo.Pipe) { os.windowsClose(g_hChildStd_ERR_Wr); }

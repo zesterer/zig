@@ -7,9 +7,9 @@ pub const BufSet = struct {
 
     const BufSetHashMap = HashMap([]const u8, void, mem.hash_slice_u8, mem.eql_slice_u8);
 
-    pub fn init(allocator: &Allocator) -> BufSet {
+    pub fn init(a: &Allocator) -> BufSet {
         var self = BufSet {
-            .hash_map = BufSetHashMap.init(allocator),
+            .hash_map = BufSetHashMap.init(a),
         };
         return self;
     }

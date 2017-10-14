@@ -29,6 +29,8 @@ pub extern "kernel32" stdcallcc fn GetConsoleMode(in_hConsoleHandle: HANDLE, out
 
 pub extern "kernel32" stdcallcc fn GetCurrentDirectoryA(nBufferLength: WORD, lpBuffer: ?LPSTR) -> DWORD;
 
+pub extern "kernel32" stdcallcc fn GetExitCodeProcess(hProcess: HANDLE, lpExitCode: &DWORD) -> BOOL;
+
 /// Retrieves the calling thread's last-error code value. The last-error code is maintained on a per-thread basis.
 /// Multiple threads do not overwrite each other's last-error code.
 pub extern "kernel32" stdcallcc fn GetLastError() -> DWORD;
