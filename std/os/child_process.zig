@@ -1,15 +1,18 @@
-const io = @import("../io.zig");
-const os = @import("index.zig");
+const std = @import("../index.zig");
+const cstr = std.cstr;
+const io = std.io;
+const os = std.os;
 const posix = os.posix;
 const windows = os.windows;
-const mem = @import("../mem.zig");
+const mem = std.mem;
 const Allocator = mem.Allocator;
-const debug = @import("../debug.zig");
+const debug = std.debug;
 const assert = debug.assert;
-const BufMap = @import("../buf_map.zig").BufMap;
+const BufMap = std.BufMap;
+const Buffer = std.Buffer;
 const builtin = @import("builtin");
 const Os = builtin.Os;
-const LinkedList = @import("../linked_list.zig").LinkedList;
+const LinkedList = std.LinkedList;
 
 error PermissionDenied;
 error ProcessNotFound;
@@ -78,14 +81,15 @@ pub const ChildProcess = struct {
             .allocator = allocator,
             .argv = argv,
             .pid = undefined,
+            .handle = undefined,
             .err_pipe = undefined,
             .llnode = undefined,
             .term = null,
             .onTerm = null,
             .env_map = null,
             .cwd = null,
-            .uid = null,
-            .gid = null,
+            .uid = if (is_windows) {} else null,
+            .gid = if (is_windows) {} else null,
             .stdin = null,
             .stdout = null,
             .stderr = null,
@@ -168,9 +172,9 @@ pub const ChildProcess = struct {
     /// Blocks until child process terminates and then cleans up all resources.
     pub fn wait(self: &ChildProcess) -> %Term {
         if (is_windows) {
-            return self.waitPosix();
-        } else {
             return self.waitWindows();
+        } else {
+            return self.waitPosix();
         }
     }
 
@@ -204,14 +208,14 @@ pub const ChildProcess = struct {
     fn waitUnwrappedWindows(self: &ChildProcess) -> %void {
         const result = os.windowsWaitSingle(self.handle, windows.INFINITE);
 
-        self.term = {
+        self.term = (%Term)({
             var exit_code: windows.DWORD = undefined;
             if (!windows.GetExitCodeProcess(self.handle, &exit_code)) {
                 Term.Unknown{0}
             } else {
                 Term.Exited {@bitCast(i32, exit_code)}
             }
-        };
+        });
 
         os.windowsClose(self.handle);
         self.cleanupStreams();
@@ -426,8 +430,8 @@ pub const ChildProcess = struct {
     }
 
     fn spawnWindows(self: &ChildProcess) -> %void {
-        var saAttr: SECURITY_ATTRIBUTES = undefined;
-        saAttr.nLength = @sizeOf(SECURITY_ATTRIBUTES);
+        var saAttr: windows.SECURITY_ATTRIBUTES = undefined;
+        saAttr.nLength = @sizeOf(windows.SECURITY_ATTRIBUTES);
         saAttr.bInheritHandle = true;
         saAttr.lpSecurityDescriptor = null;
 
@@ -435,10 +439,9 @@ pub const ChildProcess = struct {
             self.stdout_behavior == StdIo.Ignore or
             self.stderr_behavior == StdIo.Ignore);
 
-        const nul_handle: windows.HANDLE = undefined;
-        if (any_ignore) {
-            nul_handle = %return os.windowsOpen("NUL", windows.GENERIC_READ, windows.FILE_SHARE_READ,
-                windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL, null);
+        const nul_handle = if (any_ignore) {
+            %return os.windowsOpen("NUL", windows.GENERIC_READ, windows.FILE_SHARE_READ,
+                windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL, null)
         } else {
             undefined
         };
@@ -523,11 +526,11 @@ pub const ChildProcess = struct {
         };
         %defer if (stderr_ptr) |ptr| self.allocator.destroy(ptr);
 
-        const cmd_line = windowsCreateCommandLine(self.allocator, self.argv);
+        const cmd_line = %return windowsCreateCommandLine(self.allocator, self.argv);
         defer self.allocator.free(cmd_line);
 
-        var siStartInfo = STARTUPINFOA {
-            .cb = @sizeOf(STARTUPINFOA),
+        var siStartInfo = windows.STARTUPINFOA {
+            .cb = @sizeOf(windows.STARTUPINFOA),
             .hStdError = g_hChildStd_ERR_Wr,
             .hStdOutput = g_hChildStd_OUT_Wr,
             .hStdInput = g_hChildStd_IN_Rd,
@@ -561,7 +564,7 @@ pub const ChildProcess = struct {
         const cwd_ptr = if (cwd_slice) |cwd| cwd.ptr else null;
 
         const maybe_envp_buf = if (self.env_map) |env_map| {
-            os.createNullDelimitedEnvMap(self.allocator, env_map)
+            %return os.createNullDelimitedEnvMap(self.allocator, env_map)
         } else {
             null
         };
@@ -569,9 +572,10 @@ pub const ChildProcess = struct {
         const envp_ptr = if (maybe_envp_buf) |envp_buf| envp_buf.ptr else null;
 
         if (!windows.CreateProcessA(app_name.ptr, cmd_line.ptr, null, null, true, 0,
-            envp_ptr, cwd_ptr, &siStartInfo, &piProcInfo))
+            @ptrCast(?&c_void, envp_ptr),
+            cwd_ptr, &siStartInfo, &piProcInfo))
         {
-            const err = GetLastError();
+            const err = windows.GetLastError();
             return switch (err) {
                 windows.ERROR.FILE_NOT_FOUND => error.FileNotFound,
                 else => error.Unexpected,
@@ -609,9 +613,9 @@ pub const ChildProcess = struct {
         self.stdout = stdout_ptr;
         self.stderr = stderr_ptr;
 
-        if (self.stdin_behavior == StdIo.Pipe) { os.windowsClose(g_hChildStd_IN_Rd); }
-        if (self.stderr_behavior == StdIo.Pipe) { os.windowsClose(g_hChildStd_ERR_Wr); }
-        if (self.stdout_behavior == StdIo.Pipe) { os.windowsClose(g_hChildStd_OUT_Wr); }
+        if (self.stdin_behavior == StdIo.Pipe) { os.windowsClose(??g_hChildStd_IN_Rd); }
+        if (self.stderr_behavior == StdIo.Pipe) { os.windowsClose(??g_hChildStd_ERR_Wr); }
+        if (self.stdout_behavior == StdIo.Pipe) { os.windowsClose(??g_hChildStd_OUT_Wr); }
     }
 
     fn setUpChildIo(stdio: StdIo, pipe_fd: i32, std_fileno: i32, dev_null_fd: i32) -> %void {
@@ -624,9 +628,10 @@ pub const ChildProcess = struct {
     }
 };
 
-/// caller must dealloc
+/// Caller must dealloc.
+/// Guarantees a null byte at result[result.len].
 fn windowsCreateCommandLine(allocator: &Allocator, argv: []const []const u8) -> %[]u8 {
-    var buf = Buffer.initSize(allocator, 0);
+    var buf = %return Buffer.initSize(allocator, 0);
     defer buf.deinit();
 
     for (argv) |arg, arg_i| {
@@ -660,23 +665,23 @@ fn windowsCreateCommandLine(allocator: &Allocator, argv: []const []const u8) -> 
     return buf.toOwnedSlice();
 }
 
-fn windowsDestroyPipe(rd: &?windows.HANDLE, wr: &?windows.HANDLE) -> %void {
+fn windowsDestroyPipe(rd: ?windows.HANDLE, wr: ?windows.HANDLE) {
     if (rd) |h| os.windowsClose(h);
     if (wr) |h| os.windowsClose(h);
 }
 
-fn windowsMakePipe(rd: &HANDLE, wr: &HANDLE, sattr: &SECURITY_ATTRIBUTES) -> %void {
-    if (!windows.CreatePipe(rd, wr, sattr)) {
-        const err = GetLastError();
+fn windowsMakePipe(rd: &windows.HANDLE, wr: &windows.HANDLE, sattr: &windows.SECURITY_ATTRIBUTES) -> %void {
+    if (!windows.CreatePipe(rd, wr, sattr, 0)) {
+        const err = windows.GetLastError();
         return switch (err) {
             else => error.Unexpected,
         };
     }
 }
 
-fn windowsSetHandleInfo(h: HANDLE, mask: windows.DWORD, flags: windows.DWORD) -> %void {
+fn windowsSetHandleInfo(h: windows.HANDLE, mask: windows.DWORD, flags: windows.DWORD) -> %void {
     if (!windows.SetHandleInformation(h, mask, flags)) {
-        const err = GetLastError();
+        const err = windows.GetLastError();
         return switch (err) {
             else => error.Unexpected,
         };

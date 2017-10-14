@@ -402,6 +402,7 @@ pub fn createNullDelimitedEnvMap(allocator: &Allocator, env_map: &const BufMap) 
         assert(i == envp_count);
     }
     assert(envp_buf[envp_count] == null);
+    return envp_buf;
 }
 
 pub fn freeNullDelimitedEnvMap(allocator: &Allocator, envp_buf: []?&u8) {
@@ -1380,10 +1381,10 @@ error WaitTimeOut;
 pub fn windowsWaitSingle(handle: windows.HANDLE, milliseconds: windows.DWORD) -> %void {
     const result = windows.WaitForSingleObject(handle, milliseconds);
     return switch (result) {
-        WAIT_ABANDONED => error.WaitAbandoned,
-        WAIT_OBJECT_0 => {},
-        WAIT_TIMEOUT => error.WaitTimeOut,
-        WAIT_FAILED => switch (windows.GetLastError()) {
+        windows.WAIT_ABANDONED => error.WaitAbandoned,
+        windows.WAIT_OBJECT_0 => {},
+        windows.WAIT_TIMEOUT => error.WaitTimeOut,
+        windows.WAIT_FAILED => switch (windows.GetLastError()) {
             else => error.Unexpected,
         },
         else => error.Unexpected,

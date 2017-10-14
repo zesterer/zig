@@ -40,9 +40,10 @@ fn testCStrFnsImpl() {
 
 /// Returns a mutable slice with exactly the same size which is guaranteed to
 /// have a null byte after it.
+/// Caller owns the returned memory.
 pub fn addNullByte(allocator: &mem.Allocator, slice: []const u8) -> %[]u8 {
     const result = %return allocator.alloc(u8, slice.len + 1);
     mem.copy(u8, result, slice);
-    result[slice.len] = '0';
+    result[slice.len] = 0;
     return result[0..slice.len];
 }
