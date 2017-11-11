@@ -122,6 +122,50 @@ pub const FileOutStream = struct {
     }
 };
 
+/// Implementation of OutStream trait for Buffer
+pub const BufferOutStream = struct {
+    buffer: &Buffer,
+    stream: OutStream,
+
+    pub fn init(buffer: &Buffer) -> BufferOutStream {
+        return BufferOutStream {
+            .buffer = buffer,
+            .stream = OutStream {
+                .writeFn = writeFn,
+            },
+        };
+    }
+
+    fn writeFn(out_stream: &OutStream, bytes: []const u8) -> %void {
+        const self = @fieldParentPtr(BufferOutStream, "stream", out_stream);
+        return self.buffer.append(bytes);
+    }
+};
+
+/// Implementation of InStream trait for Buffer
+pub const BufferInStream = struct {
+    buffer: &Buffer,
+    index: usize,
+    stream: InStream,
+
+    pub fn init(buffer: &Buffer) -> BufferInStream {
+        return BufferInStream {
+            .buffer = buffer,
+            .index = 0,
+            .stream = InStream {
+                .readFn = readFn,
+            },
+        };
+    }
+
+    fn readFn(in_stream: &InStream, bytes: []const u8) -> %usize {
+        const self = @fieldParentPtr(BufferInStream, "stream", in_stream);
+        const amt_to_read = math.min(bytes.len, self.buffer.len() - self.index);
+        mem.copy(u8, bytes, self.buffer.toSliceConst(self.buffer)[self.index..self.index + amt_to_read];
+        return amt_to_read;
+    }
+};
+
 pub const File = struct {
     /// The OS-specific file descriptor or file handle.
     handle: os.FileHandle,
