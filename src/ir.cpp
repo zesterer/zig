@@ -6124,7 +6124,7 @@ static IrInstruction *ir_gen_continue(IrBuilder *irb, Scope *continue_scope, Ast
 
 static IrInstruction *ir_gen_error_type(IrBuilder *irb, Scope *scope, AstNode *node) {
     assert(node->type == NodeTypeErrorType);
-    return ir_build_const_type(irb, scope, node, irb->codegen->builtin_types.entry_pure_error);
+    return ir_build_const_type(irb, scope, node, irb->codegen->builtin_types.entry_global_error_set);
 }
 
 static IrInstruction *ir_gen_defer(IrBuilder *irb, Scope *parent_scope, AstNode *node) {
@@ -6174,11 +6174,17 @@ static IrInstruction *ir_gen_err_ok_or(IrBuilder *irb, Scope *parent_scope, AstN
     AstNode *op2_node = node->data.unwrap_err_expr.op2;
     AstNode *var_node = node->data.unwrap_err_expr.symbol;
 
-    IrInstruction *err_union_ptr = ir_gen_node_extra(irb, op1_node, parent_scope, LVAL_PTR);
-    if (err_union_ptr == irb->codegen->invalid_instruction)
+    if (op1_node->type != NodeTypeFnCallExpr) {
+        add_node_error(irb->codegen, op1_node, buf_sprintf("expected function call"));
+        return irb->codegen->invalid_instruction;
+    }
+
+    IrInstruction *call_result = ir_gen_node(irb, op1_node, parent_scope);
+    if (call_result == irb->codegen->invalid_instruction)
         return irb->codegen->invalid_instruction;
 
-    IrInstruction *err_union_val = ir_build_load_ptr(irb, parent_scope, node, err_union_ptr);
+    aoeu
+    IrInstruction *err_union_val = ir_build_load_ptr(irb, parent_scope, node, call_result);
     IrInstruction *is_err = ir_build_test_err(irb, parent_scope, node, err_union_val);
 
     IrInstruction *is_comptime;
@@ -6205,7 +6211,7 @@ static IrInstruction *ir_gen_err_ok_or(IrBuilder *irb, Scope *parent_scope, AstN
         VariableTableEntry *var = ir_create_var(irb, node, parent_scope, var_name,
             is_const, is_const, is_shadowable, is_comptime);
         err_scope = var->child_scope;
-        IrInstruction *err_val = ir_build_unwrap_err_code(irb, err_scope, node, err_union_ptr);
+        IrInstruction *err_val = ir_build_unwrap_err_code(irb, err_scope, node, call_result);
         ir_build_var_decl(irb, err_scope, var_node, var, var_type, nullptr, err_val);
     } else {
         err_scope = parent_scope;
@@ -6433,8 +6439,6 @@ static IrInstruction *ir_gen_node_raw(IrBuilder *irb, AstNode *node, Scope *scop
             zig_panic("TODO IR gen NodeTypeFnDef");
         case NodeTypeFnDecl:
             zig_panic("TODO IR gen NodeTypeFnDecl");
-        case NodeTypeErrorValueDecl:
-            zig_panic("TODO IR gen NodeTypeErrorValueDecl");
         case NodeTypeTestDecl:
             zig_panic("TODO IR gen NodeTypeTestDecl");
     }

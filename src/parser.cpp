@@ -2205,7 +2205,7 @@ static AstNode *ast_parse_block(ParseContext *pc, size_t *token_index, bool mand
 }
 
 /*
-FnProto = option("coldcc" | "nakedcc" | "stdcallcc") "fn" option(Symbol) ParamDeclList option("align" "(" Expression ")") option("->" TypeExpr)
+FnProto = option("coldcc" | "nakedcc" | "stdcallcc") "fn" option(Symbol) ParamDeclList option("align" "(" Expression ")") option("!" PrefixOpExpression) option("->" TypeExpr)
 */
 static AstNode *ast_parse_fn_proto(ParseContext *pc, size_t *token_index, bool mandatory, VisibMod visib_mod) {
     Token *first_token = &pc->tokens->at(*token_index);
@@ -2259,12 +2259,25 @@ static AstNode *ast_parse_fn_proto(ParseContext *pc, size_t *token_index, bool m
         ast_eat_token(pc, token_index, TokenIdRParen);
         next_token = &pc->tokens->at(*token_index);
     }
+
     if (next_token->id == TokenIdArrow) {
         *token_index += 1;
         node->data.fn_proto.return_type = ast_parse_type_expr(pc, token_index, false);
+        next_token = &pc->tokens->at(*token_index);
     } else {
         node->data.fn_proto.return_type = ast_create_void_type_node(pc, next_token);
     }
+
+    if (next_token->id == TokenIdBangBang) {
+        node->data.fn_proto.errorable = true;
+        *token_index += 1;
+        next_token = &pc->tokens->at(*token_index);
+
+        if (next_token->id != TokenIdLBrace) {
+            node->data.fn_proto.error_type = ast_parse_prefix_op_expr(pc, token_index, true);
+        }
+    }
+
 
     return node;
 }
@@ -2512,26 +2525,6 @@ static AstNode *ast_parse_container_decl(ParseContext *pc, size_t *token_index, 
 }
 
 /*
-ErrorValueDecl : "error" "Symbol" ";"
-*/
-static AstNode *ast_parse_error_value_decl(ParseContext *pc, size_t *token_index) {
-    Token *first_token = &pc->tokens->at(*token_index);
-
-    if (first_token->id != TokenIdKeywordError) {
-        return nullptr;
-    }
-    *token_index += 1;
-
-    Token *name_tok = ast_eat_token(pc, token_index, TokenIdSymbol);
-    ast_eat_token(pc, token_index, TokenIdSemicolon);
-
-    AstNode *node = ast_create_node(pc, NodeTypeErrorValueDecl, first_token);
-    node->data.error_value_decl.name = token_buf(name_tok);
-
-    return node;
-}
-
-/*
 TestDecl = "test" String Block
 */
 static AstNode *ast_parse_test_decl_node(ParseContext *pc, size_t *token_index) {
@@ -2552,7 +2545,7 @@ static AstNode *ast_parse_test_decl_node(ParseContext *pc, size_t *token_index) 
 }
 
 /*
-TopLevelItem = ErrorValueDecl | CompTimeExpression(Block) | TopLevelDecl | TestDecl
+TopLevelItem = CompTimeExpression(Block) | TopLevelDecl | TestDecl
 TopLevelDecl = option(VisibleMod) (FnDef | ExternDecl | GlobalVarDecl | UseDecl)
 */
 static void ast_parse_top_level_decls(ParseContext *pc, size_t *token_index, ZigList<AstNode *> *top_level_decls) {
@@ -2560,12 +2553,6 @@ static void ast_parse_top_level_decls(ParseContext *pc, size_t *token_index, Zig
         AstNode *comptime_expr_node = ast_parse_comptime_expr(pc, token_index, true, false);
         if (comptime_expr_node) {
             top_level_decls->append(comptime_expr_node);
-            continue;
-        }
-
-        AstNode *error_value_node = ast_parse_error_value_decl(pc, token_index);
-        if (error_value_node) {
-            top_level_decls->append(error_value_node);
             continue;
         }
 
@@ -2666,6 +2653,7 @@ void ast_visit_node_children(AstNode *node, void (*visit)(AstNode **, void *cont
             visit_node_list(&node->data.root.top_level_decls, visit, context);
             break;
         case NodeTypeFnProto:
+            visit_field(&node->data.fn_proto.error_type, visit, context);
             visit_field(&node->data.fn_proto.return_type, visit, context);
             visit_node_list(&node->data.fn_proto.params, visit, context);
             visit_field(&node->data.fn_proto.align_expr, visit, context);
@@ -2696,9 +2684,6 @@ void ast_visit_node_children(AstNode *node, void (*visit)(AstNode **, void *cont
             visit_field(&node->data.variable_declaration.type, visit, context);
             visit_field(&node->data.variable_declaration.expr, visit, context);
             visit_field(&node->data.variable_declaration.align_expr, visit, context);
-            break;
-        case NodeTypeErrorValueDecl:
-            // none
             break;
         case NodeTypeTestDecl:
             visit_field(&node->data.test_decl.body, visit, context);

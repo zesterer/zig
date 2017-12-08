@@ -30,7 +30,6 @@ TypeTableEntry *get_slice_type(CodeGen *g, TypeTableEntry *ptr_type);
 TypeTableEntry *get_partial_container_type(CodeGen *g, Scope *scope, ContainerKind kind,
         AstNode *decl_node, const char *name, ContainerLayout layout);
 TypeTableEntry *get_smallest_unsigned_int_type(CodeGen *g, uint64_t x);
-TypeTableEntry *get_error_type(CodeGen *g, TypeTableEntry *child_type);
 TypeTableEntry *get_bound_fn_type(CodeGen *g, FnTableEntry *fn_entry);
 TypeTableEntry *get_opaque_type(CodeGen *g, Scope *scope, AstNode *source_node, const char *name);
 TypeTableEntry *get_struct_type(CodeGen *g, const char *type_name, const char *field_names[],

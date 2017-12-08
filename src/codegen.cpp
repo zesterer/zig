@@ -1633,7 +1633,7 @@ static LLVMValueRef ir_render_bin_op(CodeGen *g, IrExecutable *executable,
             } else if (type_entry->id == TypeTableEntryIdEnum) {
                 LLVMIntPredicate pred = cmp_op_to_int_predicate(op_id, false);
                 return LLVMBuildICmp(g->builder, pred, op1_value, op2_value, "");
-            } else if (type_entry->id == TypeTableEntryIdPureError ||
+            } else if (type_entry->id == TypeTableEntryIdErrorSet ||
                     type_entry->id == TypeTableEntryIdPointer ||
                     type_entry->id == TypeTableEntryIdBool)
             {
@@ -1949,7 +1949,7 @@ static LLVMValueRef ir_render_int_to_enum(CodeGen *g, IrExecutable *executable, 
 
 static LLVMValueRef ir_render_int_to_err(CodeGen *g, IrExecutable *executable, IrInstructionIntToErr *instruction) {
     TypeTableEntry *wanted_type = instruction->base.value.type;
-    assert(wanted_type->id == TypeTableEntryIdPureError);
+    assert(wanted_type->id == TypeTableEntryIdErrorSet);
 
     TypeTableEntry *actual_type = instruction->target->value.type;
     assert(actual_type->id == TypeTableEntryIdInt);
@@ -1997,16 +1997,9 @@ static LLVMValueRef ir_render_err_to_int(CodeGen *g, IrExecutable *executable, I
     TypeTableEntry *actual_type = instruction->target->value.type;
     LLVMValueRef target_val = ir_llvm_value(g, instruction->target);
 
-    if (actual_type->id == TypeTableEntryIdPureError) {
+    if (actual_type->id == TypeTableEntryIdErrorSet) {
         return gen_widen_or_shorten(g, ir_want_debug_safety(g, &instruction->base),
             g->err_tag_type, wanted_type, target_val);
-    } else if (actual_type->id == TypeTableEntryIdErrorUnion) {
-        if (!type_has_bits(actual_type->data.error.child_type)) {
-            return gen_widen_or_shorten(g, ir_want_debug_safety(g, &instruction->base),
-                g->err_tag_type, wanted_type, target_val);
-        } else {
-            zig_panic("TODO");
-        }
     } else {
         zig_unreachable();
     }

@@ -5811,13 +5811,11 @@ fn readU32Be() -&gt; u32 {}</code></pre>
       <h2 id="grammar">Grammar</h2>
       <pre><code>Root = many(TopLevelItem) EOF
 
-TopLevelItem = ErrorValueDecl | CompTimeExpression(Block) | TopLevelDecl | TestDecl
+TopLevelItem = CompTimeExpression(Block) | TopLevelDecl | TestDecl
 
 TestDecl = "test" String Block
 
 TopLevelDecl = option(VisibleMod) (FnDef | ExternDecl | GlobalVarDecl | UseDecl)
-
-ErrorValueDecl = "error" Symbol ";"
 
 GlobalVarDecl = VariableDeclaration ";"
 
@@ -5831,7 +5829,7 @@ UseDecl = "use" Expression ";"
 
 ExternDecl = "extern" option(String) (FnProto | VariableDeclaration) ";"
 
-FnProto = option("coldcc" | "nakedcc" | "stdcallcc") "fn" option(Symbol) ParamDeclList option("align" "(" Expression ")") option("-&gt;" TypeExpr)
+FnProto = option("coldcc" | "nakedcc" | "stdcallcc") "fn" option(Symbol) ParamDeclList option("align" "(" Expression ")") option("!" PrefixOpExpression) option("-&gt;" TypeExpr)
 
 VisibleMod = "pub" | "export"
 

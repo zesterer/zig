@@ -1,0 +1,15 @@
+ * parser: !! like &&
+ * ast render code for new syntax
+ * update docs
+ * make sure main function is errorable or noreturn. previous code was:
+                    if (tld_fn->base.visib_mod != VisibModExport) {
+                        TypeTableEntry *err_void = get_error_type(g, g->builtin_types.entry_void);
+                        TypeTableEntry *actual_return_type = fn_table_entry->type_entry->data.fn.fn_type_id.return_type;
+                        if (actual_return_type != err_void) {
+                            add_node_error(g, fn_proto->return_type,
+                                    buf_sprintf("expected return type of main to be '%%void', instead is '%s'",
+                                        buf_ptr(&actual_return_type->name)));
+                        }
+                    }
+ * make sure the debug safety in ir_render_int_to_err takes into account error sets and not just the global error table.
+ *

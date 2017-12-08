@@ -37,6 +37,7 @@ struct IrBasicBlock;
 struct ScopeDecls;
 struct ZigWindowsSDK;
 struct Tld;
+struct ErrorField;
 
 struct IrGotoItem {
     AstNode *source_node;
@@ -177,11 +178,6 @@ struct ConstPtrValue {
     } data;
 };
 
-struct ConstErrValue {
-    ErrorTableEntry *err;
-    ConstExprValue *payload;
-};
-
 struct ConstBoundFnValue {
     FnTableEntry *fn;
     IrInstruction *first_arg;
@@ -242,8 +238,7 @@ struct ConstExprValue {
         ConstBoundFnValue x_bound_fn;
         TypeTableEntry *x_type;
         ConstExprValue *x_maybe;
-        ConstErrValue x_err_union;
-        ErrorTableEntry *x_pure_err;
+        ErrorField *x_error_set;
         BigInt x_enum_tag;
         ConstStructValue x_struct;
         ConstUnionValue x_union;
@@ -362,7 +357,6 @@ enum NodeType {
     NodeTypeReturnExpr,
     NodeTypeDefer,
     NodeTypeVariableDeclaration,
-    NodeTypeErrorValueDecl,
     NodeTypeTestDecl,
     NodeTypeBinOpExpr,
     NodeTypeUnwrapErrorExpr,
@@ -422,10 +416,12 @@ struct AstNodeFnProto {
     VisibMod visib_mod;
     Buf *name;
     ZigList<AstNode *> params;
+    AstNode *error_type;
     AstNode *return_type;
     bool is_var_args;
     bool is_extern;
     bool is_inline;
+    bool errorable;
     CallingConvention cc;
     AstNode *fn_def_node;
     // populated if this is an extern declaration
@@ -489,12 +485,6 @@ struct AstNodeVariableDeclaration {
     Buf *lib_name;
     // populated if the "align A" is present
     AstNode *align_expr;
-};
-
-struct AstNodeErrorValueDecl {
-    Buf *name;
-
-    ErrorTableEntry *err;
 };
 
 struct AstNodeTestDecl {
@@ -864,7 +854,6 @@ struct AstNode {
         AstNodeReturnExpr return_expr;
         AstNodeDefer defer;
         AstNodeVariableDeclaration variable_declaration;
-        AstNodeErrorValueDecl error_value_decl;
         AstNodeTestDecl test_decl;
         AstNodeBinOpExpr bin_op_expr;
         AstNodeUnwrapErrorExpr unwrap_err_expr;
@@ -926,6 +915,7 @@ bool generic_fn_type_id_eql(GenericFnTypeId *a, GenericFnTypeId *b);
 
 struct FnTypeId {
     TypeTableEntry *return_type;
+    TypeTableEntry *error_set;
     FnTypeParamInfo *param_info;
     size_t param_count;
     size_t next_param_index;
@@ -997,8 +987,17 @@ struct TypeTableEntryMaybe {
     TypeTableEntry *child_type;
 };
 
-struct TypeTableEntryError {
-    TypeTableEntry *child_type;
+struct ErrorField {
+    AstNode *decl_node;
+    ErrorTableEntry *entry;
+    TypeTableEntry *error_set;
+};
+
+struct TypeTableEntryErrorSet {
+    TypeTableEntry **parents;
+    size_t parent_count;
+
+    ErrorField *fields;
 };
 
 struct TypeTableEntryEnum {
@@ -1096,8 +1095,7 @@ enum TypeTableEntryId {
     TypeTableEntryIdUndefLit,
     TypeTableEntryIdNullLit,
     TypeTableEntryIdMaybe,
-    TypeTableEntryIdErrorUnion,
-    TypeTableEntryIdPureError,
+    TypeTableEntryIdErrorSet,
     TypeTableEntryIdEnum,
     TypeTableEntryIdUnion,
     TypeTableEntryIdFn,
@@ -1125,7 +1123,7 @@ struct TypeTableEntry {
         TypeTableEntryArray array;
         TypeTableEntryStruct structure;
         TypeTableEntryMaybe maybe;
-        TypeTableEntryError error;
+        TypeTableEntryErrorSet error_set;
         TypeTableEntryEnum enumeration;
         TypeTableEntryUnion unionation;
         TypeTableEntryFn fn;
@@ -1469,7 +1467,7 @@ struct CodeGen {
         TypeTableEntry *entry_undef;
         TypeTableEntry *entry_null;
         TypeTableEntry *entry_var;
-        TypeTableEntry *entry_pure_error;
+        TypeTableEntry *entry_global_error_set;
         TypeTableEntry *entry_arg_tuple;
     } builtin_types;
 
@@ -1633,7 +1631,6 @@ struct VariableTableEntry {
 struct ErrorTableEntry {
     Buf name;
     uint32_t value;
-    AstNode *decl_node;
     // If we generate a constant error name value for this error, we memoize it here.
     // The type of this is array
     ConstExprValue *cached_error_name_val;

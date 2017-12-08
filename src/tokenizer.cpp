@@ -733,6 +733,11 @@ void tokenize(Buf *buf, Tokenization *out) {
                 break;
             case TokenizeStateSawBang:
                 switch (c) {
+                    case '!':
+                        set_token_id(&t, t.cur_tok, TokenIdBangBang);
+                        end_token(&t);
+                        t.state = TokenizeStateStart;
+                        break;
                     case '=':
                         set_token_id(&t, t.cur_tok, TokenIdCmpNotEq);
                         end_token(&t);
@@ -1477,6 +1482,7 @@ const char * token_name(TokenId id) {
         case TokenIdArrow: return "->";
         case TokenIdAtSign: return "@";
         case TokenIdBang: return "!";
+        case TokenIdBangBang: return "!!";
         case TokenIdBinOr: return "|";
         case TokenIdBinXor: return "^";
         case TokenIdBitAndEq: return "&=";

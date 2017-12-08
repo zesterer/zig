@@ -172,8 +172,6 @@ static const char *node_type_str(NodeType node_type) {
             return "Defer";
         case NodeTypeVariableDeclaration:
             return "VariableDeclaration";
-        case NodeTypeErrorValueDecl:
-            return "ErrorValueDecl";
         case NodeTypeTestDecl:
             return "TestDecl";
         case NodeTypeIntLiteral:
@@ -399,7 +397,6 @@ static void render_node_extra(AstRender *ar, AstNode *node, bool grouped) {
 
                 if (child->type == NodeTypeUse ||
                     child->type == NodeTypeVariableDeclaration ||
-                    child->type == NodeTypeErrorValueDecl ||
                     child->type == NodeTypeFnProto)
                 {
                     fprintf(ar->f, ";");
@@ -998,7 +995,6 @@ static void render_node_extra(AstRender *ar, AstNode *node, bool grouped) {
             }
         case NodeTypeFnDecl:
         case NodeTypeParamDecl:
-        case NodeTypeErrorValueDecl:
         case NodeTypeTestDecl:
         case NodeTypeStructField:
         case NodeTypeUse:
