@@ -2392,13 +2392,6 @@ pub fn addCases(cases: &tests.CompileErrorContext) void {
     ,
         ".tmp_source.zig:1:1: error: invalid character: '\\xff'");
 
-    cases.add("non-printable invalid character with escape alternative",
-        "fn test() bool {\n" ++
-        "\ttrue\n" ++
-        "}\n"
-    ,
-        ".tmp_source.zig:2:1: error: invalid character: '\\t'");
-
     cases.add("@ArgType given non function parameter",
         \\comptime {
         \\    _ = @ArgType(i32, 3);
