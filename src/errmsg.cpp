@@ -9,6 +9,7 @@
 #include "os.hpp"
 
 #include <stdio.h>
+#include <ctype.h>
 
 enum ErrType {
     ErrTypeError,
@@ -45,8 +46,18 @@ static void print_err_msg_type(ErrorMsg *err, ErrColor color, ErrType err_type) 
             zig_unreachable();
         }
 
-        fprintf(stderr, "%s\n", buf_ptr(&err->line_buf));
-        for (size_t i = 0; i < err->column_start; i += 1) {
+        const char* line_start = buf_ptr(&err->line_buf);
+        size_t line_offset;
+        for (line_offset = 0; isspace(*line_start); line_start ++) {
+            line_offset ++;
+        }
+
+        fputs("    ", stderr);
+        for (size_t i = 0; line_start[i] != '\0'; i ++) {
+            fputc((line_start[i] == '\t') ? ' ' : line_start[i], stderr);
+        }
+        fputs("\n    ", stderr);
+        for (size_t i = 0; i < err->column_start - line_offset; i += 1) {
             fprintf(stderr, " ");
         }
         os_stderr_set_color(TermColorGreen);
